@@ -36,6 +36,7 @@ run_bot.bat
 ## 5. Use Commands
 - `/muteall` - Mute everyone in your voice channel
 - `/unmuteall` - Unmute everyone in your voice channel
+- `/unmuteundeafenall` - Unmute and undeafen everyone in your voice channel
 - `/mute @user` - Mute specific user
 - `/unmute @user` - Unmute specific user
 - `/help` - Show all commands

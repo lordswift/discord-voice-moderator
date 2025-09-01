@@ -22,6 +22,7 @@ A Discord bot designed to help manage voice channels during gaming sessions, par
 ### Core Commands
 - `/muteall` - Mute all members in your voice channel
 - `/unmuteall` - Unmute all members in your voice channel
+- `/unmuteundeafenall` - Unmute and undeafen all members in your voice channel
 - `/mute <user>` - Mute a specific user in your voice channel
 - `/unmute <user>` - Unmute a specific user in your voice channel
 - `/help` - Show available commands and usage information
