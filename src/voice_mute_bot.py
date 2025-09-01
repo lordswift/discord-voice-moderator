@@ -885,6 +885,43 @@ async def unmuteundeafen_user(interaction: discord.Interaction, user: discord.Me
         logger.error(f"Error in unmuteundeafen_user command: {e}")
         await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
 
+
+@bot.tree.command(name="unmutedeafen", description="Unmute and deafen a specific user in your voice channel")
+async def unmutedeafen_user(interaction: discord.Interaction, user: discord.Member):
+    """Unmute and deafen a specific user"""
+    try:
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.response.send_message(bot.config['messages']['no_voice_channel'], ephemeral=True)
+            return
+
+        voice_channel = interaction.user.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await interaction.response.send_message("\u274c The specified user is not in your voice channel!", ephemeral=True)
+            return
+
+        if not (interaction.user.guild_permissions.mute_members and interaction.user.guild_permissions.deafen_members):
+            await interaction.response.send_message(bot.config['messages']['no_permission'], ephemeral=True)
+            return
+
+        if not (interaction.guild.me.guild_permissions.mute_members and interaction.guild.me.guild_permissions.deafen_members):
+            await interaction.response.send_message(bot.config['messages']['bot_no_permission'], ephemeral=True)
+            return
+
+        try:
+            await user.edit(mute=False, deafen=True)
+            await interaction.response.send_message(f"\ud83d\udd0a Unmuted+Deafened {user.display_name}")
+            if bot.config['features']['log_actions']:
+                logger.info(f"{interaction.user.display_name} unmuted+deafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await interaction.response.send_message(f"\u274c Cannot unmute+deafen {user.display_name} - insufficient permissions!", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Error unmuting+deafening {user.display_name}: {e}")
+            await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Error in unmutedeafen_user command: {e}")
+        await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
+
 @bot.tree.command(name="help", description="Show available commands and their usage")
 async def help_command(interaction: discord.Interaction):
     """Show help information"""
@@ -898,7 +935,13 @@ async def help_command(interaction: discord.Interaction):
         name="🎯 Primary Commands",
         value=(
             "`/muteall` - Mute all members in your voice channel\n"
-            "`/unmuteall` - Unmute all members in your voice channel"
+            "`/unmuteall` - Unmute all members in your voice channel\n"
+            "`/deafenall` - Deafen all members in your voice channel\n"
+            "`/undeafenall` - Undeafen all members in your voice channel\n"
+            "`/mutedeafenall` - Mute and deafen all members\n"
+            "`/muteundeafenall` - Mute and undeafen all members\n"
+            "`/unmuteundeafenall` - Unmute and undeafen all members\n"
+            "`/unmutedeafenall` - Unmute and deafen all members"
         ),
         inline=False
     )
@@ -907,7 +950,13 @@ async def help_command(interaction: discord.Interaction):
         name="👤 Individual Commands",
         value=(
             "`/mute <user>` - Mute a specific user in your voice channel\n"
-            "`/unmute <user>` - Unmute a specific user in your voice channel"
+            "`/unmute <user>` - Unmute a specific user in your voice channel\n"
+            "`/deafen <user>` - Deafen a specific user\n"
+            "`/undeafen <user>` - Undeafen a specific user\n"
+            "`/mutedeafen <user>` - Mute and deafen a user\n"
+            "`/muteundeafen <user>` - Mute and undeafen a user\n"
+            "`/unmuteundeafen <user>` - Unmute and undeafen a user\n"
+            "`/unmutedeafen <user>` - Unmute and deafen a user"
         ),
         inline=False
     )
