@@ -116,14 +116,44 @@ class VoiceMuteBot(commands.Bot):
             guild_id = os.getenv('DISCORD_GUILD_ID')
             if guild_id:
                 try:
-                    guild_obj = discord.Object(id=int(guild_id))
-                    synced_guild = await self.tree.sync(guild=guild_obj)
-                    logger.info(f"Synced {len(synced_guild)} command(s) to guild {guild_id}")
+                    # Validate numeric guild id; skip if it's a placeholder or invalid
+                    try:
+                        gid = int(guild_id)
+                    except ValueError:
+                        logger.warning(
+                            f"DISCORD_GUILD_ID value '{guild_id}' is not a valid numeric guild id; skipping guild sync. "
+                            "Set a numeric guild id in .env or run /sync_commands in a guild to register commands immediately."
+                        )
+                    else:
+                        guild_obj = discord.Object(id=gid)
+                        synced_guild = await self.tree.sync(guild=guild_obj)
+                        logger.info(f"Synced {len(synced_guild)} command(s) to guild {gid}")
                 except Exception as ge:
                     logger.error(f"Failed to sync commands to guild {guild_id}: {ge}")
         except Exception:
             # non-fatal
             pass
+
+        # Auto-sync to all guilds the bot is a member of for immediate availability.
+        # Note: This can be heavy if the bot is in many guilds; disable if you prefer global propagation.
+        try:
+            for g in self.guilds:
+                try:
+                    guild_obj = discord.Object(id=g.id)
+                    synced_guild = await self.tree.sync(guild=guild_obj)
+                    logger.info(f"Synced {len(synced_guild)} command(s) to guild {g.id} ({g.name})")
+                except Exception as ge:
+                    logger.warning(f"Failed to sync commands to guild {g.id} ({g.name}): {ge}")
+        except Exception:
+            # non-fatal
+            pass
+
+        # Log the currently registered application command names for debugging
+        try:
+            registered = [c.name for c in self.tree.walk_commands()]
+            logger.info(f"Registered application commands: {registered}")
+        except Exception as e:
+            logger.warning(f"Could not enumerate application commands: {e}")
     
     async def on_command_error(self, ctx, error):
         """Handle command errors"""
@@ -1038,9 +1068,19 @@ async def sync_commands(interaction: discord.Interaction, guild_id: str = None):
     try:
         target_guild_id = None
 
-        # If a guild_id param was provided, use it
+        # If a guild_id param was provided, use it (validate numeric)
         if guild_id:
-            target_guild_id = int(guild_id)
+            try:
+                target_guild_id = int(guild_id)
+            except ValueError:
+                # Inform the caller that the provided id is invalid and abort
+                logger.warning(f"sync_commands called with invalid guild_id: {guild_id}")
+                await interaction.followup.send(
+                    f"❌ The provided guild_id '{guild_id}' is not a valid numeric guild id."
+                    " Provide a numeric guild id or run this command inside the target server.",
+                    ephemeral=True
+                )
+                return
 
         # Else, if invoked within a guild context, use that guild's id
         elif interaction.guild:
@@ -1066,6 +1106,24 @@ async def sync_commands(interaction: discord.Interaction, guild_id: str = None):
         logger.error(f"Error syncing commands: {e}")
         await interaction.followup.send(f"Failed to sync commands: {e}")
 
+
+@bot.tree.command(name="list_commands", description="(Admin) List currently registered application command names")
+@discord.app_commands.checks.has_permissions(administrator=True)
+async def list_commands(interaction: discord.Interaction):
+    """Return the list of registered app command names (ephemeral)."""
+    await interaction.response.defer(ephemeral=True)
+    try:
+        names = [c.name for c in bot.tree.walk_commands()]
+        if not names:
+            await interaction.followup.send("No application commands are currently registered.", ephemeral=True)
+            return
+        # Limit output size
+        payload = ', '.join(names)
+        await interaction.followup.send(f"Registered commands ({len(names)}): {payload}", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Error listing commands: {e}")
+        await interaction.followup.send(f"Failed to enumerate commands: {e}", ephemeral=True)
+
 @sync_commands.error
 async def sync_commands_error(interaction: discord.Interaction, error):
     if isinstance(error, discord.app_commands.MissingPermissions):
@@ -1073,6 +1131,60 @@ async def sync_commands_error(interaction: discord.Interaction, error):
     else:
         logger.error(f"Error in sync_commands command: {error}")
         await interaction.response.send_message("An error occurred while trying to sync commands.", ephemeral=True)
+
+
+# Legacy text alias for admins: !sync [guild_id]
+@bot.command(name="sync")
+@commands.has_permissions(administrator=True)
+async def cmd_sync(ctx: commands.Context, guild_id: str = None):
+    """Admin text command to sync application commands. Usage: `!sync` or `!sync <guild_id>`"""
+    try:
+        async with ctx.typing():
+            target_guild_id = None
+
+            if guild_id:
+                try:
+                    target_guild_id = int(guild_id)
+                except ValueError:
+                    await ctx.send(f"❌ The provided guild_id '{guild_id}' is not a valid numeric guild id.")
+                    return
+            elif ctx.guild:
+                target_guild_id = int(ctx.guild.id)
+
+            if target_guild_id:
+                guild_obj = discord.Object(id=target_guild_id)
+                try:
+                    synced = await bot.tree.sync(guild=guild_obj)
+                    await ctx.send(f"Synced {len(synced)} command(s) to guild {target_guild_id}")
+                    try:
+                        persist_env_var('DISCORD_GUILD_ID', str(target_guild_id))
+                    except Exception:
+                        logger.warning("Could not persist DISCORD_GUILD_ID to .env")
+                    return
+                except Exception as e:
+                    logger.error(f"Error syncing commands to guild {target_guild_id}: {e}")
+                    await ctx.send(f"Failed to sync commands to guild {target_guild_id}: {e}")
+                    return
+
+            # No guild target: perform global sync
+            try:
+                synced = await bot.tree.sync()
+                await ctx.send(f"Globally synced {len(synced)} command(s). Global propagation may take up to an hour.")
+            except Exception as e:
+                logger.error(f"Error performing global sync: {e}")
+                await ctx.send(f"Failed to perform global sync: {e}")
+
+    except Exception as e:
+        logger.error(f"Error in sync (text) command: {e}")
+        await ctx.send("An unexpected error occurred while syncing commands.")
+
+@cmd_sync.error
+async def cmd_sync_error(ctx: commands.Context, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You must be an administrator to use this command.")
+    else:
+        logger.error(f"Error in cmd_sync command: {error}")
+        await ctx.send("An error occurred while trying to sync commands.")
 
 
 # ----------------------
