@@ -9,6 +9,35 @@ import logging
 # Load environment variables
 load_dotenv()
 
+
+def persist_env_var(key: str, value: str, env_path: str = '.env'):
+    """Write or update a key=value pair in the .env file (creates file if missing)."""
+    try:
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+        key_eq = f"{key}="
+        found = False
+        for i, line in enumerate(lines):
+            if line.strip().startswith(key_eq):
+                lines[i] = f"{key}={value}\n"
+                found = True
+                break
+
+        if not found:
+            lines.append(f"{key}={value}\n")
+
+        with open(env_path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+
+        logger.info(f"Persisted {key} to {env_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to persist env var {key}: {e}")
+        return False
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1007,12 +1036,30 @@ async def sync_commands(interaction: discord.Interaction, guild_id: str = None):
     """Force a command sync. If guild_id is provided, syncs to that guild immediately."""
     await interaction.response.defer(ephemeral=True)
     try:
+        target_guild_id = None
+
+        # If a guild_id param was provided, use it
         if guild_id:
-            guild_obj = discord.Object(id=int(guild_id))
+            target_guild_id = int(guild_id)
+
+        # Else, if invoked within a guild context, use that guild's id
+        elif interaction.guild:
+            target_guild_id = int(interaction.guild.id)
+
+        if target_guild_id:
+            guild_obj = discord.Object(id=target_guild_id)
             synced = await bot.tree.sync(guild=guild_obj)
-            await interaction.followup.send(f"Synced {len(synced)} command(s) to guild {guild_id}")
+            await interaction.followup.send(f"Synced {len(synced)} command(s) to guild {target_guild_id}")
+
+            # Persist to .env for future runs
+            try:
+                persist_env_var('DISCORD_GUILD_ID', str(target_guild_id))
+            except Exception:
+                logger.warning("Could not persist DISCORD_GUILD_ID to .env")
+
             return
 
+        # No guild target; perform global sync
         synced = await bot.tree.sync()
         await interaction.followup.send(f"Globally synced {len(synced)} command(s). Global propagation may take up to an hour.")
     except Exception as e:
