@@ -125,6 +125,18 @@ copy env_example.txt .env
 
 # Edit .env file and add your bot token
 # DISCORD_BOT_TOKEN=your_bot_token_here
+
+### Optional: Register slash commands immediately in a specific server
+
+If you want slash commands to appear immediately in one server (they can take up to an hour when registered globally), add your server's numeric Guild ID to the `.env` as `DISCORD_GUILD_ID` and restart the bot. Example:
+
+DISCORD_GUILD_ID=123456789012345678
+
+How to find your Guild ID:
+- In Discord, open Settings → Advanced → enable "Developer Mode".
+- Right-click your server icon and choose "Copy ID".
+
+Alternatively, invite the bot to the server and run the `/sync_commands` slash command as a server administrator — the bot will sync commands to that server immediately and persist the guild id to `.env` for future runs.
 ```
 
 **For Linux/Mac:**

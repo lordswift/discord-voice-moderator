@@ -22,6 +22,18 @@ cp env_example.txt .env    # Linux/Mac
 
 # Edit .env file and add your bot token
 DISCORD_BOT_TOKEN=your_bot_token_here
+
+### Optional: Make slash commands appear immediately in one server
+
+1. In Discord: User Settings → Advanced → enable Developer Mode
+2. Right-click your server icon → Copy ID (this is the numeric Guild ID)
+3. Edit `.env` and set `DISCORD_GUILD_ID` to that numeric value, for example:
+
+DISCORD_GUILD_ID=123456789012345678
+
+4. Restart the bot. The bot will sync application commands to that guild for immediate availability.
+
+If you prefer not to edit `.env`, invite the bot and run the `/sync_commands` slash command as a server administrator inside the target server — it will sync commands immediately and persist the guild id automatically.
 ```
 
 ## 4. Run Bot
