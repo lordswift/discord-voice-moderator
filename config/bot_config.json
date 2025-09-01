@@ -1,0 +1,43 @@
+{
+    "bot_settings": {
+        "command_prefix": "!",
+        "description": "Voice Channel Mute Manager Bot",
+        "activity_type": "playing",
+        "activity_name": "with voice channels"
+    },
+    "permissions": {
+        "required_permissions": [
+            "mute_members",
+            "deafen_members",
+            "move_members"
+        ],
+        "admin_roles": [],
+        "moderator_roles": []
+    },
+    "messages": {
+        "mute_all_success": "🔇 Muted all members in voice channel",
+        "unmute_all_success": "🔊 Unmuted all members in voice channel",
+        "deafen_all_success": "🔇 Deafened all members in voice channel",
+        "undeafen_all_success": "🔊 Undeafened all members in voice channel",
+        "mutedeafen_all_success": "🔇 Muted and deafened all members in voice channel",
+        "muteundeafen_all_success": "🔇 Muted and undeafened all members in voice channel",
+        "mute_user_success": "🔇 Muted {user}",
+        "unmute_user_success": "🔊 Unmuted {user}",
+        "deafen_user_success": "🔇 Deafened {user}",
+        "undeafen_user_success": "🔊 Undeafened {user}",
+        "mutedeafen_user_success": "🔇 Muted and deafened {user}",
+        "muteundeafen_user_success": "🔇 Muted and undeafened {user}",
+        "no_voice_channel": "❌ You must be in a voice channel to use this command",
+        "no_permission": "❌ You don't have permission to mute/unmute members",
+        "bot_no_permission": "❌ Bot doesn't have permission to mute/unmute members",
+        "user_not_found": "❌ User not found in voice channel",
+        "user_not_muted": "❌ User is not muted",
+        "user_already_muted": "❌ User is already muted",
+        "error_occurred": "❌ An error occurred while processing the command"
+    },
+    "features": {
+        "allow_self_mute": true,
+        "log_actions": true,
+        "auto_unmute_on_leave": false
+    }
+}
