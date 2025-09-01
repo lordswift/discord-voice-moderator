@@ -75,12 +75,26 @@ class VoiceMuteBot(commands.Bot):
         )
         await self.change_presence(activity=activity)
         
-        # Sync commands
+        # First try global sync (may take up to 1 hour to appear globally)
         try:
             synced = await self.tree.sync()
-            logger.info(f"Synced {len(synced)} command(s)")
+            logger.info(f"Synced {len(synced)} global command(s)")
         except Exception as e:
-            logger.error(f"Failed to sync commands: {e}")
+            logger.error(f"Failed to sync global commands: {e}")
+
+        # If a test guild is configured (DISCORD_GUILD_ID) sync commands to that guild for immediate availability
+        try:
+            guild_id = os.getenv('DISCORD_GUILD_ID')
+            if guild_id:
+                try:
+                    guild_obj = discord.Object(id=int(guild_id))
+                    synced_guild = await self.tree.sync(guild=guild_obj)
+                    logger.info(f"Synced {len(synced_guild)} command(s) to guild {guild_id}")
+                except Exception as ge:
+                    logger.error(f"Failed to sync commands to guild {guild_id}: {ge}")
+        except Exception:
+            # non-fatal
+            pass
     
     async def on_command_error(self, ctx, error):
         """Handle command errors"""
@@ -984,6 +998,657 @@ async def help_command(interaction: discord.Interaction):
     embed.set_footer(text="Perfect for gaming sessions where voice control is essential!")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="sync_commands", description="(Admin) Sync application commands globally or to a guild (useful for testing)")
+@discord.app_commands.checks.has_permissions(administrator=True)
+@discord.app_commands.describe(guild_id="Optional guild id to sync to (for immediate registration)")
+async def sync_commands(interaction: discord.Interaction, guild_id: str = None):
+    """Force a command sync. If guild_id is provided, syncs to that guild immediately."""
+    await interaction.response.defer(ephemeral=True)
+    try:
+        if guild_id:
+            guild_obj = discord.Object(id=int(guild_id))
+            synced = await bot.tree.sync(guild=guild_obj)
+            await interaction.followup.send(f"Synced {len(synced)} command(s) to guild {guild_id}")
+            return
+
+        synced = await bot.tree.sync()
+        await interaction.followup.send(f"Globally synced {len(synced)} command(s). Global propagation may take up to an hour.")
+    except Exception as e:
+        logger.error(f"Error syncing commands: {e}")
+        await interaction.followup.send(f"Failed to sync commands: {e}")
+
+@sync_commands.error
+async def sync_commands_error(interaction: discord.Interaction, error):
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+    else:
+        logger.error(f"Error in sync_commands command: {error}")
+        await interaction.response.send_message("An error occurred while trying to sync commands.", ephemeral=True)
+
+
+# ----------------------
+# Legacy text (! prefix) commands
+# These mirror the slash commands above so users can use the old prefix-based commands.
+# ----------------------
+
+@bot.command(name="muteall")
+async def cmd_mute_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+
+        if not ctx.author.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members_to_mute = [member for member in voice_channel.members if not member.bot and not member.voice.mute]
+        if not members_to_mute:
+            await ctx.send("🔇 All members in the voice channel are already muted!")
+            return
+
+        muted_count = 0
+        for member in members_to_mute:
+            try:
+                await member.edit(mute=True)
+                muted_count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot mute {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error muting {member.display_name}: {e}")
+
+        success_message = f"{bot.config['messages']['mute_all_success']} ({muted_count} members)"
+        await ctx.send(success_message)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} muted {muted_count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in muteall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="unmuteall")
+async def cmd_unmute_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not ctx.author.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members_to_unmute = [member for member in voice_channel.members if not member.bot and member.voice.mute]
+        if not members_to_unmute:
+            await ctx.send("🔊 All members in the voice channel are already unmuted!")
+            return
+
+        unmuted_count = 0
+        for member in members_to_unmute:
+            try:
+                await member.edit(mute=False)
+                unmuted_count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot unmute {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error unmuting {member.display_name}: {e}")
+
+        success_message = f"{bot.config['messages']['unmute_all_success']} ({unmuted_count} members)"
+        await ctx.send(success_message)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} unmuted {unmuted_count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in unmuteall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="deafenall")
+async def cmd_deafen_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not ctx.author.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members_to_deafen = [member for member in voice_channel.members if not member.bot and not member.voice.deaf]
+        if not members_to_deafen:
+            await ctx.send("🔇 All members in the voice channel are already deafened!")
+            return
+
+        deafened_count = 0
+        for member in members_to_deafen:
+            try:
+                await member.edit(deafen=True)
+                deafened_count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot deafen {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error deafening {member.display_name}: {e}")
+
+        msg = f"{bot.config['messages'].get('deafen_all_success', '🔇 Deafened all members in voice channel')} ({deafened_count} members)"
+        await ctx.send(msg)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} deafened {deafened_count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in deafenall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="undeafenall")
+async def cmd_undeafen_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not ctx.author.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members_to_undeafen = [member for member in voice_channel.members if not member.bot and member.voice.deaf]
+        if not members_to_undeafen:
+            await ctx.send("🔊 All members in the voice channel are already undeafened!")
+            return
+
+        undeafened_count = 0
+        for member in members_to_undeafen:
+            try:
+                await member.edit(deafen=False)
+                undeafened_count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot undeafen {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error undeafening {member.display_name}: {e}")
+
+        msg = f"{bot.config['messages'].get('undeafen_all_success', '🔊 Undeafen all members in voice channel')} ({undeafened_count} members)"
+        await ctx.send(msg)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} undeafened {undeafened_count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in undeafenall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="mutedeafenall")
+async def cmd_mutedeafen_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members = [m for m in voice_channel.members if not m.bot and (not m.voice.mute or not m.voice.deaf)]
+        if not members:
+            await ctx.send("🔇 All members already muted+deafened!")
+            return
+
+        count = 0
+        for member in members:
+            try:
+                await member.edit(mute=True, deafen=True)
+                count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot mute+deafen {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error muting+deafening {member.display_name}: {e}")
+
+        msg = f"{bot.config['messages'].get('mutedeafen_all_success', '🔇 Muted+Deafened all members in voice channel')} ({count} members)"
+        await ctx.send(msg)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} muted+deafened {count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in mutedeafenall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="muteundeafenall")
+async def cmd_muteundeafen_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members = [m for m in voice_channel.members if not m.bot and (not m.voice.mute or m.voice.deaf)]
+        if not members:
+            await ctx.send("🔇 All members already muted+undeafened!")
+            return
+
+        count = 0
+        for member in members:
+            try:
+                await member.edit(mute=True, deafen=False)
+                count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot mute+undeafen {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error muting+undeafening {member.display_name}: {e}")
+
+        msg = f"{bot.config['messages'].get('muteundeafen_all_success', '🔇 Muted+Undeafened all members in voice channel')} ({count} members)"
+        await ctx.send(msg)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} muted+undeafened {count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in muteundeafenall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="unmuteundeafenall")
+async def cmd_unmuteundeafen_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members = [m for m in voice_channel.members if not m.bot and (m.voice.mute or m.voice.deaf)]
+        if not members:
+            await ctx.send("🔊 All members already unmuted+undeafened!")
+            return
+
+        count = 0
+        for member in members:
+            try:
+                await member.edit(mute=False, deafen=False)
+                count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot unmute+undeafen {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error unmuting+undeafening {member.display_name}: {e}")
+
+        msg = f"{bot.config['messages'].get('unmuteundeafen_all_success', '🔊 Unmuted+Undeafened all members in voice channel')} ({count} members)"
+        await ctx.send(msg)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} unmuted+undeafened {count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in unmuteundeafenall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="unmutedeafenall")
+async def cmd_unmutedeafen_all(ctx: commands.Context):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        members = [m for m in voice_channel.members if not m.bot and (m.voice.mute or not m.voice.deaf)]
+        if not members:
+            await ctx.send("🔇 All members already unmuted+deafened!")
+            return
+
+        count = 0
+        for member in members:
+            try:
+                await member.edit(mute=False, deafen=True)
+                count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot unmute+deafen {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error unmuting+deafening {member.display_name}: {e}")
+
+        msg = f"{bot.config['messages'].get('unmutedeafen_all_success', '🔊 Unmuted+Deafened all members in voice channel')} ({count} members)"
+        await ctx.send(msg)
+        if bot.config.get('features', {}).get('log_actions'):
+            logger.info(f"{ctx.author.display_name} unmuted+deafened {count} members in {voice_channel.name}")
+    except Exception as e:
+        logger.error(f"Error in unmutedeafenall (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+# Individual/user text commands
+@bot.command(name="mute")
+async def cmd_mute_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not ctx.author.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        if user.voice.mute:
+            await ctx.send(f"❌ {user.display_name} is already muted!")
+            return
+
+        try:
+            await user.edit(mute=True)
+            await ctx.send(f"🔇 Muted {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} muted {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot mute {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error muting {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in mute (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="unmute")
+async def cmd_unmute_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not ctx.author.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.mute_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        if not user.voice.mute:
+            await ctx.send(f"❌ {user.display_name} is not muted!")
+            return
+
+        try:
+            await user.edit(mute=False)
+            await ctx.send(f"🔊 Unmuted {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} unmuted {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot unmute {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error unmuting {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in unmute (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="deafen")
+async def cmd_deafen_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not ctx.author.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        if user.voice.deaf:
+            await ctx.send(f"❌ {user.display_name} is already deafened!")
+            return
+
+        try:
+            await user.edit(deafen=True)
+            await ctx.send(f"🔇 Deafened {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} deafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot deafen {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error deafening {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in deafen (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="undeafen")
+async def cmd_undeafen_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not ctx.author.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not ctx.guild.me.guild_permissions.deafen_members:
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        if not user.voice.deaf:
+            await ctx.send(f"❌ {user.display_name} is not deafened!")
+            return
+
+        try:
+            await user.edit(deafen=False)
+            await ctx.send(f"🔊 Undeafened {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} undeafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot undeafen {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error undeafening {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in undeafen (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="mutedeafen")
+async def cmd_mutedeafen_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        try:
+            await user.edit(mute=True, deafen=True)
+            await ctx.send(f"🔇 Muted+Deafened {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} muted+deafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot mute+deafen {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error muting+deafening {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in mutedeafen (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="muteundeafen")
+async def cmd_muteundeafen_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        try:
+            await user.edit(mute=True, deafen=False)
+            await ctx.send(f"🔇 Muted+Undeafened {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} muted+undeafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot mute+undeafen {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error muting+undeafening {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in muteundeafen (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="unmuteundeafen")
+async def cmd_unmuteundeafen_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        try:
+            await user.edit(mute=False, deafen=False)
+            await ctx.send(f"🔊 Unmuted+Undeafened {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} unmuted+undeafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot unmute+undeafen {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error unmuting+undeafening {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in unmuteundeafen (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
+
+
+@bot.command(name="unmutedeafen")
+async def cmd_unmutedeafen_user(ctx: commands.Context, user: discord.Member):
+    try:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send(bot.config['messages']['no_voice_channel'])
+            return
+
+        voice_channel = ctx.author.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await ctx.send("❌ The specified user is not in your voice channel!")
+            return
+
+        if not (ctx.author.guild_permissions.mute_members and ctx.author.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['no_permission'])
+            return
+
+        if not (ctx.guild.me.guild_permissions.mute_members and ctx.guild.me.guild_permissions.deafen_members):
+            await ctx.send(bot.config['messages']['bot_no_permission'])
+            return
+
+        try:
+            await user.edit(mute=False, deafen=True)
+            await ctx.send(f"🔊 Unmuted+Deafened {user.display_name}")
+            if bot.config.get('features', {}).get('log_actions'):
+                logger.info(f"{ctx.author.display_name} unmuted+deafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Cannot unmute+deafen {user.display_name} - insufficient permissions!")
+        except Exception as e:
+            logger.error(f"Error unmuting+deafening {user.display_name}: {e}")
+            await ctx.send(bot.config['messages']['error_occurred'])
+    except Exception as e:
+        logger.error(f"Error in unmutedeafen (text) command: {e}")
+        await ctx.send(bot.config['messages']['error_occurred'])
 
 def main():
     """Main function to run the bot"""
