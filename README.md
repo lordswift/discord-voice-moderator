@@ -269,6 +269,32 @@ Enable/disable features:
 - Try restarting the bot
 - Check bot is in the server
 
+## 🧭 Command Styles
+
+This bot supports both modern Discord slash commands and legacy prefix text commands. If your server or workflow prefers the classic prefix style you can use `!` commands as aliases for the slash commands. Example: `!muteall` behaves the same as `/muteall`.
+
+All supported commands (both slash and `!` prefix):
+
+Channel-wide commands:
+- `/muteall` or `!muteall` — mute everyone in your current voice channel
+- `/unmuteall` or `!unmuteall` — unmute everyone in your current voice channel
+- `/deafenall` or `!deafenall` — deafen everyone in your current voice channel
+- `/undeafenall` or `!undeafenall` — undeafen everyone in your current voice channel
+- `/mutedeafenall` or `!mutedeafenall` — mute and deafen everyone
+- `/muteundeafenall` or `!muteundeafenall` — mute and undeafen everyone
+- `/unmuteundeafenall` or `!unmuteundeafenall` — unmute and undeafen everyone
+- `/unmutedeafenall` or `!unmutedeafenall` — unmute and then deafen everyone
+
+Per-user commands (use `@user` to mention target):
+- `/mute @user` or `!mute @user` — mute the target
+- `/unmute @user` or `!unmute @user` — unmute the target
+- `/deafen @user` or `!deafen @user` — deafen the target
+- `/undeafen @user` or `!undeafen @user` — undeafen the target
+- `/mutedeafen @user` or `!mutedeafen @user` — mute and deafen the target
+- `/muteundeafen @user` or `!muteundeafen @user` — mute and undeafen the target
+- `/unmuteundeafen @user` or `!unmuteundeafen @user` — unmute and undeafen the target
+- `/unmutedeafen @user` or `!unmutedeafen @user` — unmute and then deafen the target
+
 ### Logs
 The bot logs important events. Check console output for:
 - Command usage

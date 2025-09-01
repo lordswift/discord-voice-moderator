@@ -73,4 +73,28 @@ Examples:
 - You need "Mute Members" permission
 - Bot needs "Mute Members" permission
 
+Note: Legacy prefix commands are supported. You can use `!` as an alternative to slash commands (for example `!muteall` behaves the same as `/muteall`).
+
+Full command list (slash and `!` prefix):
+
+Channel-wide:
+- `/muteall` or `!muteall`
+- `/unmuteall` or `!unmuteall`
+- `/deafenall` or `!deafenall`
+- `/undeafenall` or `!undeafenall`
+- `/mutedeafenall` or `!mutedeafenall`
+- `/muteundeafenall` or `!muteundeafenall`
+- `/unmuteundeafenall` or `!unmuteundeafenall`
+- `/unmutedeafenall` or `!unmutedeafenall`
+
+Per-user:
+- `/mute @user` or `!mute @user`
+- `/unmute @user` or `!unmute @user`
+- `/deafen @user` or `!deafen @user`
+- `/undeafen @user` or `!undeafen @user`
+- `/mutedeafen @user` or `!mutedeafen @user`
+- `/muteundeafen @user` or `!muteundeafen @user`
+- `/unmuteundeafen @user` or `!unmuteundeafen @user`
+- `/unmutedeafen @user` or `!unmutedeafen @user`
+
 That's it! Your bot is ready to help manage voice channels during gaming sessions! 🎮
