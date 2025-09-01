@@ -497,6 +497,51 @@ async def unmuteundeafen_all(interaction: discord.Interaction):
         await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
 
 
+@bot.tree.command(name="unmutedeafenall", description="Unmute and deafen all members in your voice channel")
+async def unmutedeafen_all(interaction: discord.Interaction):
+    """Unmute and deafen all members in the voice channel"""
+    try:
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.response.send_message(bot.config['messages']['no_voice_channel'], ephemeral=True)
+            return
+
+        voice_channel = interaction.user.voice.channel
+        # require both permissions
+        if not (interaction.user.guild_permissions.mute_members and interaction.user.guild_permissions.deafen_members):
+            await interaction.response.send_message(bot.config['messages']['no_permission'], ephemeral=True)
+            return
+
+        if not (interaction.guild.me.guild_permissions.mute_members and interaction.guild.me.guild_permissions.deafen_members):
+            await interaction.response.send_message(bot.config['messages']['bot_no_permission'], ephemeral=True)
+            return
+
+        # select members that either are muted or not deafened so the operation is meaningful
+        members = [m for m in voice_channel.members if not m.bot and (m.voice.mute or not m.voice.deaf)]
+        if not members:
+            await interaction.response.send_message("\ud83d\udd07 All members already unmuted+deafened!", ephemeral=True)
+            return
+
+        count = 0
+        for member in members:
+            try:
+                await member.edit(mute=False, deafen=True)
+                count += 1
+            except discord.Forbidden:
+                logger.warning(f"Cannot unmute+deafen {member.display_name} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Error unmuting+deafening {member.display_name}: {e}")
+
+        msg = f"{bot.config['messages'].get('unmutedeafen_all_success', '\ud83d\udd0a Unmuted+Deafened all members in voice channel')} ({count} members)"
+        await interaction.response.send_message(msg)
+
+        if bot.config['features']['log_actions']:
+            logger.info(f"{interaction.user.display_name} unmuted+deafened {count} members in {voice_channel.name}")
+
+    except Exception as e:
+        logger.error(f"Error in unmutedeafen_all command: {e}")
+        await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
+
+
 @bot.tree.command(name="mute", description="Mute a specific user in your voice channel")
 async def mute_user(interaction: discord.Interaction, user: discord.Member):
     """Mute a specific user in the voice channel"""
@@ -801,6 +846,43 @@ async def muteundeafen_user(interaction: discord.Interaction, user: discord.Memb
 
     except Exception as e:
         logger.error(f"Error in muteundeafen_user command: {e}")
+        await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
+
+
+@bot.tree.command(name="unmuteundeafen", description="Unmute and undeafen a specific user in your voice channel")
+async def unmuteundeafen_user(interaction: discord.Interaction, user: discord.Member):
+    """Unmute and undeafen a specific user"""
+    try:
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.response.send_message(bot.config['messages']['no_voice_channel'], ephemeral=True)
+            return
+
+        voice_channel = interaction.user.voice.channel
+        if not user.voice or user.voice.channel != voice_channel:
+            await interaction.response.send_message("\u274c The specified user is not in your voice channel!", ephemeral=True)
+            return
+
+        if not (interaction.user.guild_permissions.mute_members and interaction.user.guild_permissions.deafen_members):
+            await interaction.response.send_message(bot.config['messages']['no_permission'], ephemeral=True)
+            return
+
+        if not (interaction.guild.me.guild_permissions.mute_members and interaction.guild.me.guild_permissions.deafen_members):
+            await interaction.response.send_message(bot.config['messages']['bot_no_permission'], ephemeral=True)
+            return
+
+        try:
+            await user.edit(mute=False, deafen=False)
+            await interaction.response.send_message(f"\ud83d\udd0a Unmuted+Undeafened {user.display_name}")
+            if bot.config['features']['log_actions']:
+                logger.info(f"{interaction.user.display_name} unmuted+undeafened {user.display_name} in {voice_channel.name}")
+        except discord.Forbidden:
+            await interaction.response.send_message(f"\u274c Cannot unmute+undeafen {user.display_name} - insufficient permissions!", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Error unmuting+undeafening {user.display_name}: {e}")
+            await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Error in unmuteundeafen_user command: {e}")
         await interaction.response.send_message(bot.config['messages']['error_occurred'], ephemeral=True)
 
 @bot.tree.command(name="help", description="Show available commands and their usage")

@@ -27,6 +27,47 @@ A Discord bot designed to help manage voice channels during gaming sessions, par
 - `/unmute <user>` - Unmute a specific user in your voice channel
 - `/help` - Show available commands and usage information
 
+### Full Command Reference
+The bot supports channel-wide and per-user voice state commands. For each action below there is a channel-wide command (applies to everyone in your voice channel) and a per-user command (target a single member).
+
+Channel-wide commands:
+- `/muteall` — mute everyone in your current voice channel
+- `/unmuteall` — unmute everyone in your current voice channel
+- `/deafenall` — deafen everyone in your current voice channel
+- `/undeafenall` — undeafen everyone in your current voice channel
+- `/mutedeafenall` — mute and deafen everyone
+- `/muteundeafenall` — mute and undeafen everyone
+- `/unmuteundeafenall` — unmute and undeafen everyone
+- `/unmutedeafenall` — unmute and then deafen everyone
+
+Per-user commands (use `@user` to mention target):
+- `/mute @user` — mute the target
+- `/unmute @user` — unmute the target
+- `/deafen @user` — deafen the target
+- `/undeafen @user` — undeafen the target
+- `/mutedeafen @user` — mute and deafen the target
+- `/muteundeafen @user` — mute and undeafen the target
+- `/unmuteundeafen @user` — unmute and undeafen the target
+- `/unmutedeafen @user` — unmute and then deafen the target
+
+Examples:
+1. Mute everyone during gameplay:
+```
+/muteall
+```
+2. Unmute and undeafen after a round:
+```
+/unmuteundeafenall
+```
+3. Mute and deafen a specific user:
+```
+/mutedeafen @troublesomePlayer
+```
+4. Unmute a user but keep them deafened:
+```
+/unmutedeafen @spectator
+```
+
 ### Key Features
 - ✅ **Permission Checks**: Ensures users have proper permissions before executing commands
 - ✅ **Voice Channel Validation**: Commands only work when you're in a voice channel

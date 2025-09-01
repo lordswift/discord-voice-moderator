@@ -41,6 +41,28 @@ run_bot.bat
 - `/unmute @user` - Unmute specific user
 - `/help` - Show all commands
 
+Extended commands:
+- `/deafenall`, `/undeafenall`
+- `/mutedeafenall`, `/muteundeafenall`
+- `/unmuteundeafenall`, `/unmutedeafenall`
+
+Per-user variants (use `@user`):
+- `/deafen @user`, `/undeafen @user`
+- `/mutedeafen @user`, `/muteundeafen @user`
+- `/unmuteundeafen @user`, `/unmutedeafen @user`
+
+Examples:
+```
+# Mute everyone during gameplay
+/muteall
+
+# Unmute and undeafen after the round
+/unmuteundeafenall
+
+# Mute and deafen a player
+/mutedeafen @player
+```
+
 ## 🎮 Perfect for:
 - **Among Us**: Mute during gameplay, unmute between rounds
 - **Deceit**: Mute when using in-game voice
